@@ -1,0 +1,405 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------------------------------------------------------------------------
+   Semantic token layer — "Nocturne" (redesign v2, docs/redesign/06-redesign-spec.md).
+
+   Components address roles (surface / line / text / accent), never raw scale
+   steps. The scales in tailwind.config.ts are still where these values
+   *conceptually* come from and stay available for genuine one-offs, but
+   anything carrying a role resolves through a token here — so a contrast fix
+   is one line in this block instead of the ~40 call sites it used to be.
+
+   DUAL THEME. Phase 1–5 shipped light-only on purpose; that decision was
+   reopened for this redesign. `:root` is the light palette, `[data-theme=
+   "dark"]` overrides it. Every token name below exists in both blocks —
+   components never need a `dark:` variant, because the variable they read
+   already points at the right value for the active theme.
+
+   CHANNEL TRIPLES, NOT HEX. Each token holds space-separated sRGB channels
+   (`109 74 255`, not `#6D4AFF`) so Tailwind can compose it as
+   `rgb(var(--token) / <alpha-value>)` — that's what makes `bg-surface/80`
+   actually produce translucency instead of silently rendering nothing, which
+   is what a `var(--hex-string)` token does under an opacity modifier. The hex
+   stays as a trailing comment because it's what a human actually reads.
+
+   Ratios below are WCAG 2.1 relative luminance, computed against the surface
+   the token composites onto in practice — same convention the old comment
+   used, just re-measured for the new values. Reproduce with
+   docs/redesign/06-redesign-spec.md §9's script.
+   --------------------------------------------------------------------------- */
+:root {
+  color-scheme: light; /* native form controls (date input, selects) render light */
+
+  /* Surfaces — three elevation levels, replacing one .card for everything.
+     Token name is still --surface-page (never renamed, see rule R2) even
+     though the spec doc calls this role "--page" — same variable. */
+  --surface-page: 247 247 250; /* #F7F7FA — page background, 1.07 separation from --surface */
+  --surface: 255 255 255; /* #FFFFFF — cards / sections */
+  --surface-elevated: 255 255 255; /* #FFFFFF — floating: drawer, popover */
+  --surface-sunken: 244 244 248; /* #F4F4F8 — nested panels, use this, never another card */
+  --surface-hover: 237 237 244; /* #EDEDF4 — hover fill for controls, replaces bg-cream-300 */
+
+  /* Lines. --border-input is new and deliberately separate from
+     --border-strong — see the comment on .input-field/.btn-secondary below
+     for why a single "strong border" token can't serve both roles. */
+  --border-subtle: 232 232 240; /* #E8E8F0 — decorative only */
+  --border-strong: 213 213 226; /* #D5D5E2 — decorative separation */
+  --border-input: 140 140 164; /* #8C8CA4 — 3.28:1 surface · 3.07:1 page. controls only */
+
+  /* Text */
+  --text-primary: 11 11 18; /* #0B0B12   19.61:1 surface */
+  --text-secondary: 63 63 82; /* #3F3F52   10.27:1 surface */
+  --text-muted: 100 100 122; /* #64647A   5.76:1 surface · 5.39 page · 5.25 sunken — lightest permitted */
+  --text-placeholder: 100 100 122; /* #64647A — same ceiling as --text-muted */
+  --text-on-accent: 255 255 255; /* #FFFFFF   5.15:1 on accent fill */
+
+  /* Accent — violet, replacing terracotta. --accent-fill/--accent-fill-hover
+     mirror --accent/--accent-hover exactly, same as the old palette did:
+     one pair for text/links, a same-valued pair for solid button fills, kept
+     as separate tokens because a caller styling a filled button shouldn't
+     have to know it happens to equal the link color today. */
+  --accent: 109 74 255; /* #6D4AFF   5.15:1 surface · 4.82 page */
+  --accent-hover: 89 54 240; /* #5936F0   6.54:1 surface */
+  --accent-fill: 109 74 255; /* #6D4AFF — mirrors --accent */
+  --accent-fill-hover: 89 54 240; /* #5936F0 — mirrors --accent-hover */
+  --accent-tint: 240 237 255; /* #F0EDFF — badge background */
+  --accent-on-tint: 89 54 240; /* #5936F0   5.69:1 on tint */
+
+  /* Status */
+  --calm: 180 83 9; /* #B45309   5.02:1 surface · 4.51 on tint */
+  --calm-tint: 254 243 199; /* #FEF3C7 */
+  --positive: 14 122 85; /* #0E7A55   5.34:1 surface · 4.59 on tint */
+  --positive-tint: 214 245 230; /* #D6F5E6 */
+  --critical: 194 51 74; /* #C2334A   5.43:1 surface · 4.61 on tint */
+  --critical-tint: 254 231 234; /* #FEE7EA */
+
+  /* Inverse — tooltip / overlay ground. Same values in both themes' sense of
+     "opposite of the page" (dark-on-light here, flips in dark below). */
+  --inverse: 11 11 18; /* #0B0B12 */
+  --on-inverse: 242 242 247; /* #F2F2F7 */
+
+  /* Shadow tint — feeds boxShadow below via rgb(var(--shadow) / alpha), so a
+     shadow on a warm page and a shadow on a near-black page can use the same
+     three-tier scale with different alphas instead of two hardcoded palettes. */
+  --shadow: 40 40 70; /* #282846 */
+
+  /* ── Motion ──────────────────────────────────────────────────────────
+     One vocabulary, defined here and re-exported to Tailwind as
+     `ease-entrance` / `duration-fast|base|slow` (see tailwind.config.ts),
+     so a component never picks its own curve or a bare `duration-300`.
+
+     Only `transform` and `opacity` are ever animated in this app. Anything
+     that animates `height`, `width`, `margin`, or `top`/`left` forces layout
+     on every frame, which is what makes a mid-range phone stutter — the
+     details drawer used to shift the page with `transition-[margin]` and was
+     rewritten onto `translateX` for exactly this reason. */
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-fast: 150ms; /* hover / focus / press   */
+  --motion-base: 250ms; /* enter / exit            */
+  --motion-slow: 400ms; /* drawer / panel / settle */
+
+  /* Shadow tiers — three-layer soft/soft-lg/elevated structure, unchanged;
+     only the color source (--shadow) and alphas are theme-driven now. Light
+     alphas are the same numbers the old hardcoded rgba() shadows used. */
+  --shadow-soft: 0 2px 8px -2px rgb(var(--shadow) / 0.1), 0 8px 20px -8px rgb(var(--shadow) / 0.12);
+  --shadow-soft-lg: 0 4px 14px -4px rgb(var(--shadow) / 0.12), 0 14px 32px -12px rgb(var(--shadow) / 0.16);
+  --shadow-elevated: 0 10px 24px -6px rgb(var(--shadow) / 0.22), 0 22px 48px -16px rgb(var(--shadow) / 0.26);
+
+  /* Skeleton shimmer sweep. Carries its own alpha rather than composing one
+     via rgb(var(--token) / a), because the two themes need different alphas
+     from the same definition — the same reason the shadow tiers above are
+     spelled out per theme. Light keeps the 0.6 white the hardcoded gradient
+     used. */
+  --shimmer-sweep: rgb(255 255 255 / 0.6);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark; /* native form controls render dark instead of a white widget on a dark page */
+
+  --surface-page: 10 10 15; /* #0A0A0F — surface separation 1.08 */
+  --surface: 20 20 28; /* #14141C */
+  --surface-elevated: 28 28 38; /* #1C1C26 — 1.08 above surface */
+  --surface-sunken: 15 15 22; /* #0F0F16 */
+  --surface-hover: 34 34 46; /* #22222E */
+
+  --border-subtle: 38 38 52; /* #262634 — decorative only */
+  --border-strong: 51 51 67; /* #333343 — decorative separation */
+  --border-input: 106 106 136; /* #6A6A88 — 3.51:1 surface · 3.79:1 page */
+
+  --text-primary: 242 242 247; /* #F2F2F7   16.41:1 surface */
+  --text-secondary: 196 196 212; /* #C4C4D4   10.63:1 surface */
+  --text-muted: 148 148 172; /* #9494AC   6.18:1 surface · 6.67 page · 6.44 sunken */
+  --text-placeholder: 148 148 172; /* #9494AC */
+  --text-on-accent: 11 11 18; /* #0B0B12   5.27:1 on accent fill */
+
+  --accent: 139 107 255; /* #8B6BFF   4.92:1 surface · 5.31 page */
+  --accent-hover: 164 136 255; /* #A488FF   6.58:1 surface */
+  --accent-fill: 139 107 255; /* #8B6BFF — mirrors --accent */
+  --accent-fill-hover: 164 136 255; /* #A488FF — mirrors --accent-hover */
+  --accent-tint: 30 24 51; /* #1E1833 */
+  --accent-on-tint: 139 107 255; /* #8B6BFF   4.58:1 on tint */
+
+  --calm: 251 191 36; /* #FBBF24   10.97:1 surface · 8.15 on tint */
+  --calm-tint: 58 44 8; /* #3A2C08 */
+  --positive: 52 211 153; /* #34D399   9.53:1 surface · 7.21 on tint */
+  --positive-tint: 11 51 38; /* #0B3326 */
+  --critical: 255 107 129; /* #FF6B81   6.69:1 surface · 6.02 on tint */
+  --critical-tint: 58 17 25; /* #3A1119 */
+
+  --inverse: 242 242 247; /* #F2F2F7 — inverted in dark: light ground for a dark-mode tooltip */
+  --on-inverse: 11 11 18; /* #0B0B12 */
+
+  --shadow: 0 0 0; /* #000000 — near-black surfaces need a true-black shadow to read at all */
+
+  /* Same three-tier structure as light, alphas raised substantially: a
+     shadow made of --shadow (pure black) at light-mode alphas is invisible
+     against a --surface that's already near-black. */
+  --shadow-soft: 0 2px 8px -2px rgb(var(--shadow) / 0.4), 0 8px 20px -8px rgb(var(--shadow) / 0.5);
+  --shadow-soft-lg: 0 4px 14px -4px rgb(var(--shadow) / 0.45), 0 14px 32px -12px rgb(var(--shadow) / 0.55);
+  --shadow-elevated: 0 10px 24px -6px rgb(var(--shadow) / 0.55), 0 22px 48px -16px rgb(var(--shadow) / 0.65);
+
+  /* 0.10, not 0.6: a 60% white sweep across a #0F0F16 skeleton composites to
+     ~#9F9FA2 — a strobe, not a shimmer. */
+  --shimmer-sweep: rgb(255 255 255 / 0.1);
+}
+
+@layer base {
+  body {
+    @apply bg-warm-gradient text-primary antialiased;
+    background-color: rgb(var(--surface-page));
+    min-height: 100vh;
+  }
+
+  /* Product UI moved off Fraunces onto Inter (redesign v2 — the cute/journal
+     voice stayed for the AI/photo-driven parts of the app, but headings
+     reading as generic marketing serif was the actual complaint). Inter is a
+     real variable font, so unlike the old Fraunces setup there is no
+     weight-substitution quirk to work around: 600 is a real loaded weight,
+     not a stand-in.
+
+     No font-variation-settings here — Inter has no SOFT/WONK axes, and
+     applying Fraunces' axis names to a font that doesn't have them is a
+     silent no-op at best. That personality moved to .font-marketing below,
+     for the marketing routes that keep Fraunces on purpose.
+
+     -0.02em tracking is applied here rather than gated to only the
+     display-* font sizes: .font-display is the class actually placed on
+     headings, tightening should follow wherever that class goes, and at
+     `title`/`label` sizes -0.02em is well under a pixel — there is nothing
+     to gate. */
+  .font-display {
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* Marketing routes (`/`, `/login`, `/join`) keep one expressive face on
+     purpose — spec §3: "one expressive face, kept — this is where
+     personality belongs." Bound to --font-marketing, a variable this file
+     does not set; app/layout.tsx (owned by another package) needs to load
+     Fraunces into that CSS variable for this class to do anything. Until
+     then it's inert, which is fine — nothing references it yet either. */
+  .font-marketing {
+    font-weight: 500;
+    font-variation-settings: "SOFT" 20, "WONK" 1;
+  }
+}
+
+@layer components {
+  /* Resting surface — the default for cards and page sections. */
+  .card {
+    @apply rounded-xl2 border border-subtle bg-surface shadow-soft;
+  }
+
+  /* Floating surface — drawers and popovers, things that sit above the page
+     rather than in it. Separated from .card so the app header and a list row
+     stop sharing one visual treatment. */
+  .card-elevated {
+    @apply rounded-xl2 border border-subtle bg-surface-elevated shadow-soft-lg;
+  }
+
+  /* A clickable card (group/itinerary list rows) — same resting look as
+     .card, plus a decisive hover "lift" using the elevated shadow token.
+     Kept separate from .card so purely-static containers (e.g. PlaceCard's
+     own <article>) never imply an affordance they don't have.
+
+     The lift is repeated under focus-visible, not just hover: a keyboard
+     user gets the identical affordance, plus a ring, because this element
+     had no explicit focus style at all before. */
+  .card-link {
+    @apply block rounded-xl2 border border-subtle bg-surface shadow-soft transition duration-fast ease-entrance hover:-translate-y-0.5 hover:shadow-elevated focus-visible:-translate-y-0.5 focus-visible:shadow-elevated focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface-page;
+  }
+
+  /* Nested content. This is the replacement for the "bordered box inside a
+     card" pattern: content inside a surface steps *down* into the sunken
+     tone instead of stacking another framed card on top. No border, no
+     shadow, and a tighter radius than .card so the nesting reads correctly. */
+  .surface-sunken {
+    @apply rounded-xl bg-surface-sunken;
+  }
+
+  /* `active:scale-[0.98]` is the whole press affordance — a 2% settle, not a
+     bounce. It is deliberately the only transform on a button: anything
+     springier reads as a game control, not a planning app. Kept in sync with
+     components/ui/Button.tsx, which carries the same pair for callers that
+     use the component rather than these classes. */
+  .btn-primary {
+    @apply inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-transparent bg-accent-fill px-5 py-2.5 text-body font-semibold text-on-accent shadow-soft transition duration-fast ease-entrance hover:bg-accent-fill-hover focus-visible:bg-accent-fill-hover active:bg-accent-fill-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  /* --border-input, not --border-strong, on .btn-secondary and .input-field
+     below. Both are controls, and WCAG 1.4.11 needs 3:1 for "visual
+     information required to identify a UI component" — but 3:1 against
+     white is a visibly heavy line, and putting that weight on every
+     decorative card divider would make the whole UI look like a wireframe.
+     So two tokens: --border-input on controls, --border-strong/--border-subtle
+     stays on decoration. The old single --border-strong (dustyrose-200,
+     1.4:1 in the pre-redesign palette) failed the control case and was never
+     caught, because phase 1–5 only ever measured text pairs. */
+  .btn-secondary {
+    @apply inline-flex min-h-11 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border border-input bg-surface-sunken px-5 py-2.5 text-body font-semibold text-primary transition duration-fast ease-entrance hover:bg-surface-hover focus-visible:bg-surface-hover active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full min-h-11 rounded-xl border border-input bg-surface px-4 py-2.5 text-body text-primary shadow-sm transition-colors duration-fast ease-entrance placeholder:text-placeholder focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent;
+  }
+
+  /* Shape-only pill primitive — callers still supply their own background
+     and text color per semantic meaning, which components/ui/Badge.tsx now
+     centralizes as contrast-verified tone pairs. This class owns only the
+     shape/sizing, so every pill in the app stays visually identical. */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-micro font-bold;
+  }
+
+  /* Page texture. Replaces the three blurred gradient orbs that used to sit
+     in app/layout.tsx (§2.5 no. 4 — the one genuine "AI-generated UI" tell in
+     this project): soft blobs that referenced nothing.
+
+     This is paper: a fractal-noise grain, the tooth of a page in a travel
+     journal. It is an inline data URI, so no asset file and no network
+     request, and the whole declaration is well under 2KB. `stitchTiles`
+     makes the 140px tile seamless where it repeats.
+
+     A first attempt used hairline grid lines instead. The Impeccable
+     detector rejected it as `codex-grid-background` — a tiled two-axis
+     hairline field is itself a recognized generated-UI signature, so that
+     would have traded one tell for another rather than fixing anything.
+
+     The 0.04 rect opacity is set by contrast, not by taste, re-measured for
+     the Nocturne palette. Worst case is a fully black grain pixel landing
+     directly under --text-muted on --surface-page: composite
+     rgb(247,247,250) at 96% + black at 4% ≈ rgb(237,237,240) / #EDEDF0,
+     where --text-muted (#64647A) still measures 4.93:1 — clears 4.5:1.
+     Real grain pixels average near mid-gray, so the practical figure is
+     higher. Texture does not get to spend contrast budget. Cards are opaque
+     surfaces, so text on a card is unaffected entirely.
+
+     Applied to a fixed, aria-hidden, pointer-events-none layer — never to a
+     content element — so it can never interfere with hit testing or with
+     what a screen reader announces. */
+  .bg-paper {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='paperGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23paperGrain)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+
+  /* Dark-theme override: the light grain is a black rect masked by noise, so
+     on a near-black --surface-page it disappears — hence a second SVG that
+     masks a *white* feFlood by the turbulence's luminance instead
+     (feColorMatrix type="luminanceToAlpha" + feComposite operator="in"),
+     giving light flecks on a dark ground rather than just re-tinting the
+     same dark-on-dark noise. Opacity drops to 0.03 (spec §2.4).
+
+     Re-measured worst case: a fully white grain pixel landing on
+     --surface-page (rgb(10,10,15)) at local alpha 1, composited at the
+     layer's 0.03 opacity: rgb(255,255,255)*0.03 + rgb(10,10,15)*0.97 ≈
+     rgb(17,17,22) / #111116. --text-muted dark (#9494AC) against that
+     composite measures ~6.35:1 — clears 4.5:1 with more room than light's
+     4.93:1, because a near-black page has far less luminance for a bright
+     fleck to eat into. */
+  [data-theme="dark"] .bg-paper {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='paperGrainDark'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch' result='n'/%3E%3CfeColorMatrix in='n' type='luminanceToAlpha' result='a'/%3E%3CfeFlood flood-color='white' result='f'/%3E%3CfeComposite in='f' in2='a' operator='in'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23paperGrainDark)' opacity='0.03'/%3E%3C/svg%3E");
+  }
+
+  /* Hit-area expansion for controls that must stay visually small.
+
+     36px is the floor Button's `sm` size and the pill controls hold, and it
+     clears WCAG 2.2 2.5.8's 24px absolute minimum comfortably — but it is
+     under the 44px a thumb actually wants. Growing the boxes to 44px is the
+     wrong fix: a members list of 44px pills beside 44px avatars, or a tab
+     strip that tall, changes the density of every surface these sit on.
+
+     So the *box* stays 36px and the *target* becomes 44px: 4px of invisible
+     hit area above and below, which is what the click lands on. Horizontal
+     inset stays 0 — these controls are all wider than they are tall, so
+     height is the only failing axis, and expanding sideways is what would
+     start stealing clicks from the control next door.
+
+     Vertical-only also keeps adjacent controls from overlapping: every row
+     that stacks these uses gap-2 (8px) or wider, so two expanded targets
+     meet exactly and never cross.
+
+     `h-11` centred, NOT `-inset-y-1`. An absolutely positioned pseudo-element
+     resolves its offsets against the *padding* box, so `-inset-y-1` on a 36px
+     control wearing a 1px border yields 34 + 8 = **42px**, not 44 — measured,
+     and every variant in buttonStyles.ts carries a border. Pinning the height
+     directly makes the target exactly 44px whether or not there is a border,
+     which is the number this whole block exists to produce. */
+  .touch-target {
+    @apply relative;
+  }
+  .touch-target::after {
+    content: "";
+    @apply absolute inset-x-0 top-1/2 h-11 -translate-y-1/2;
+  }
+
+  /* Shimmering placeholder block for route-level loading states. Sized/
+     shaped per usage via className; this only owns the shimmer effect. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-surface-sunken;
+  }
+  .skeleton::after {
+    content: "";
+    @apply absolute inset-0 bg-shimmer animate-shimmer;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion — one global net, not a per-animation opt-in.
+
+   Written before any of the motion above it, and deliberately as a blanket
+   rule rather than a list of the animations this app happens to have today:
+   the previous approach (guard `.skeleton::after`, forget the rest) left the
+   drawer's `duration-300` slide, the card hover lift, and the AI panel's
+   fade running for people who asked the OS not to animate anything.
+
+   `animation-delay: -1ms` is the part that is easy to leave out and matters
+   most here. Every reveal in this app uses `animation-fill-mode: both` plus a
+   stagger delay, so a delay that survived this block would hold the element
+   at opacity 0 for its full stagger before snapping in — motion removed, but
+   content withheld. A negative delay starts each animation already past its
+   own (now 0.01ms) duration, so everything lands at its final state on the
+   first frame.
+
+   0.01ms rather than 0s so `animationend`/`transitionend` still fire; nothing
+   in this app depends on them today, but killing the events outright is the
+   kind of thing that breaks a component added later for no visible reason.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: -1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Belt and braces for the one genuinely infinite animation in the app.
+     The rule above would still run the shimmer, once, instantly; dropping
+     the animation-name removes it entirely. */
+  .skeleton::after {
+    animation: none;
+  }
+}
