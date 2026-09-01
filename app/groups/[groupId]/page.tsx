@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { leaveGroup } from "@/lib/actions/groups";
+import { deleteGroup, leaveGroup } from "@/lib/actions/groups";
 import { createItinerary } from "@/lib/actions/itineraries";
 import { AppShell } from "@/components/ui/AppShell";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -291,6 +291,40 @@ export default async function GroupPage({
           </ul>
         )}
       </Surface>
+
+      {isCreator && (
+        <Surface
+          as="section"
+          elevation="flat"
+          aria-labelledby="delete-group-heading"
+          className="border-critical"
+        >
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h2
+                id="delete-group-heading"
+                className="font-display text-title text-primary"
+              >
+                Delete group
+              </h2>
+              <p className="mt-2 max-w-md text-body text-secondary">
+                Permanently deletes this group, every trip and stop, all
+                invites, and its member profiles. This cannot be undone.
+              </p>
+            </div>
+            <form action={deleteGroup} className="shrink-0">
+              <input type="hidden" name="groupId" value={group.id} />
+              <ConfirmButton
+                confirmText="Delete permanently"
+                pendingText="Deleting…"
+                announcement={`Delete ${group.name}, every trip and stop, all invites, and its member profiles? Press again to confirm. This cannot be undone.`}
+              >
+                Delete group
+              </ConfirmButton>
+            </form>
+          </div>
+        </Surface>
+      )}
     </AppShell>
   );
 }

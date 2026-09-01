@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { updateItinerary } from "@/lib/actions/itineraries";
+import { deleteItinerary, updateItinerary } from "@/lib/actions/itineraries";
 import { Button } from "@/components/ui/Button";
+import { ConfirmButton } from "@/components/ui/ConfirmButton";
 import { Field } from "@/components/ui/Field";
 import { Sheet } from "@/components/ui/Sheet";
 import { ITINERARY_LOCATION_MAX_LENGTH } from "@/lib/constraints";
@@ -35,42 +36,72 @@ export function EditItineraryDetails({
       </Button>
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Trip settings">
-        <form
-          action={async (formData) => {
-            await updateItinerary(formData);
-            setOpen(false);
-          }}
-          className="flex flex-col gap-5"
-        >
-          <input type="hidden" name="itineraryId" value={itineraryId} />
-          <input type="hidden" name="title" value={title} />
+        <div className="space-y-7">
+          <form
+            action={async (formData) => {
+              await updateItinerary(formData);
+              setOpen(false);
+            }}
+            className="flex flex-col gap-5"
+          >
+            <input type="hidden" name="itineraryId" value={itineraryId} />
+            <input type="hidden" name="title" value={title} />
 
-          {/* One column, not the sm:grid-cols-2 this had. The sheet is 448px
-              at its widest and a full-bleed bottom sheet below that, so two
-              tracks would put a date picker and a 200-character location
-              field in about 180px each. */}
-          <Field
-            id={`plannedDate-${itineraryId}`}
-            label="Date"
-            name="plannedDate"
-            type="date"
-            defaultValue={plannedDate ?? ""}
-          />
-          <Field
-            id={`location-${itineraryId}`}
-            label="Location"
-            name="location"
-            defaultValue={location ?? ""}
-            maxLength={ITINERARY_LOCATION_MAX_LENGTH}
-            placeholder="e.g. Aachen"
-          />
+            {/* One column, not the sm:grid-cols-2 this had. The sheet is 448px
+                at its widest and a full-bleed bottom sheet below that, so two
+                tracks would put a date picker and a 200-character location
+                field in about 180px each. */}
+            <Field
+              id={`plannedDate-${itineraryId}`}
+              label="Date"
+              name="plannedDate"
+              type="date"
+              defaultValue={plannedDate ?? ""}
+            />
+            <Field
+              id={`location-${itineraryId}`}
+              label="Location"
+              name="location"
+              defaultValue={location ?? ""}
+              maxLength={ITINERARY_LOCATION_MAX_LENGTH}
+              placeholder="e.g. Aachen"
+            />
 
-          {/* Save only. The Cancel button that sat beside it was a third way
-              to do what the sheet's own close button and Escape already do. */}
-          <Button type="submit" pendingText="Saving…">
-            Save
-          </Button>
-        </form>
+            {/* Save only. The Cancel button that sat beside it was a third way
+                to do what the sheet's own close button and Escape already do. */}
+            <Button type="submit" pendingText="Saving…">
+              Save
+            </Button>
+          </form>
+
+          {/* Separate form: nesting this inside the settings form would be
+              invalid HTML and could submit the wrong Server Action. */}
+          <section
+            aria-labelledby={`delete-trip-${itineraryId}`}
+            className="border-t border-strong pt-6"
+          >
+            <h3
+              id={`delete-trip-${itineraryId}`}
+              className="font-display text-title text-primary"
+            >
+              Delete trip
+            </h3>
+            <p className="mt-2 text-body text-secondary">
+              Permanently deletes this trip and all of its stops. This cannot
+              be undone.
+            </p>
+            <form action={deleteItinerary} className="mt-4">
+              <input type="hidden" name="itineraryId" value={itineraryId} />
+              <ConfirmButton
+                confirmText="Delete permanently"
+                pendingText="Deleting…"
+                announcement={`Delete ${title} and all of its stops? Press again to confirm. This cannot be undone.`}
+              >
+                Delete trip
+              </ConfirmButton>
+            </form>
+          </section>
+        </div>
       </Sheet>
     </>
   );

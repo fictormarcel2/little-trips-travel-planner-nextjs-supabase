@@ -129,6 +129,42 @@ export async function updateItinerary(formData: FormData) {
   revalidatePath(`/groups/${itinerary.group_id}/itineraries/${itineraryId}`);
 }
 
+/** Permanently removes a trip; its stops cascade at the database layer. */
+export async function deleteItinerary(formData: FormData) {
+  const itineraryId = String(formData.get("itineraryId") ?? "");
+  if (!itineraryId) {
+    throw new Error("Missing itinerary");
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  // requireItinerary confirms the posted id resolves through the caller's
+  // membership-scoped SELECT policy. The DELETE policy repeats that check.
+  const itinerary = await requireItinerary(supabase, itineraryId);
+  const { error } = await supabase
+    .from("itineraries")
+    .delete()
+    .eq("id", itineraryId)
+    .eq("group_id", itinerary.group_id);
+
+  if (error) {
+    throw toUserError(
+      "deleteItinerary failed",
+      error,
+      "Couldn't delete the trip — please try again."
+    );
+  }
+
+  revalidatePath(`/groups/${itinerary.group_id}`);
+  redirect(`/groups/${itinerary.group_id}`);
+}
+
 export async function refreshItineraryWeather(formData: FormData) {
   const itineraryId = String(formData.get("itineraryId") ?? "");
   if (!itineraryId) {

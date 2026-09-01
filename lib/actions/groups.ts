@@ -144,6 +144,85 @@ export async function revokeInvite(formData: FormData) {
   revalidatePath(`/groups/${groupId}`);
 }
 
+/**
+ * Permanently removes a group and everything scoped beneath it.
+ *
+ * The database owns the relational cleanup through ON DELETE CASCADE:
+ * memberships, invites, trips, stops, profiles, preferences and the selected
+ * cover row all disappear with the group. The active uploaded cover is a
+ * Storage object rather than a relational row, so it is cleaned up separately
+ * after the database delete succeeds.
+ */
+export async function deleteGroup(formData: FormData) {
+  const groupId = String(formData.get("groupId") ?? "");
+  if (!groupId) {
+    throw new Error("Missing group");
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    redirect("/login");
+  }
+
+  // Server Actions are public mutation endpoints: never trust the posted id.
+  // RLS independently restricts DELETE to created_by = auth.uid(), while this
+  // explicit check produces a useful error and gives us the cover path before
+  // the cascading delete removes its row.
+  const { data: group } = await supabase
+    .from("groups")
+    .select("id, created_by, group_covers(cover)")
+    .eq("id", groupId)
+    .maybeSingle();
+
+  if (!group || group.created_by !== user.id) {
+    throw new Error("Only the group creator can delete this group");
+  }
+
+  const coverEmbed = group.group_covers as
+    | { cover: string }
+    | { cover: string }[]
+    | null;
+  const cover = !coverEmbed
+    ? null
+    : Array.isArray(coverEmbed)
+      ? coverEmbed[0]?.cover ?? null
+      : coverEmbed.cover;
+
+  const { error } = await supabase
+    .from("groups")
+    .delete()
+    .eq("id", groupId)
+    .eq("created_by", user.id);
+
+  if (error) {
+    throw toUserError(
+      "deleteGroup failed",
+      error,
+      "Couldn't delete the group — please try again."
+    );
+  }
+
+  // Best-effort and deliberately after the database succeeds: a Storage
+  // cleanup failure may leave one harmless orphan, but must never leave the
+  // group alive with its selected cover already missing.
+  if (cover?.startsWith("upload:")) {
+    const path = cover.slice("upload:".length);
+    const admin = createAdminClient();
+    const { error: storageError } = await admin.storage
+      .from("group-covers")
+      .remove([path]);
+    if (storageError) {
+      console.error("Failed to clean up deleted group's cover", storageError);
+    }
+  }
+
+  revalidatePath("/groups");
+  redirect("/groups");
+}
+
 export type JoinResult =
   | { ok: true; groupId: string }
   | { ok: false; reason: "not-found" | "revoked" | "expired" };
